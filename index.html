@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Football Analysis Pro</title>
+
+<style>
+:root{
+  --bg:#0b1220;
+  --panel:#111827;
+  --accent:#22c55e;
+  --red:#dc2626;
+  --blue:#2563eb;
+  --line:#334155;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--bg);
+  color:#e5e7eb;
+  font-family:Inter,Arial,sans-serif;
+}
+
+header{
+  padding:14px 20px;
+  font-size:22px;
+  font-weight:600;
+  background:#020617;
+  border-bottom:1px solid var(--line);
+}
+
+#app{
+  display:flex;
+  height:calc(100vh - 60px);
+}
+
+/* PANEL */
+#panel{
+  width:340px;
+  background:var(--panel);
+  padding:14px;
+  overflow:auto;
+  border-right:1px solid var(--line);
+}
+
+.section{
+  margin-bottom:16px;
+}
+
+.section h3{
+  margin:6px 0 8px;
+  font-size:14px;
+  text-transform:uppercase;
+  letter-spacing:.05em;
+  color:#9ca3af;
+}
+
+input,select,button{
+  width:100%;
+  margin:5px 0;
+  padding:10px;
+  border-radius:6px;
+  border:1px solid var(--line);
+  background:#020617;
+  color:white;
+}
+
+button{
+  cursor:pointer;
+  font-weight:600;
+}
+
+button.primary{background:var(--accent);color:black;border:none}
+button.red{background:var(--red);border:none}
+button.blue{background:var(--blue);border:none}
+button:hover{opacity:.9}
+
+/* EVENTS */
+.event{
+  padding:6px;
+  font-size:13px;
+  border-bottom:1px solid var(--line);
+  cursor:pointer;
+}
+.event:hover{background:#020617}
+
+/* MAIN */
+#main{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:flex-start;
+  padding:10px;
+}
+
+video{
+  max-height:38vh;
+  border-radius:8px;
+  border:2px solid var(--accent);
+}
+
+/* PITCH */
+#pitch{
+  margin-top:10px;
+  width:760px;
+  height:470px;
+  background:linear-gradient(#16a34a,#15803d);
+  border-radius:12px;
+  position:relative;
+  box-shadow:0 10px 40px #000;
+}
+
+.line{position:absolute;background:white}
+.mid{left:50%;top:0;width:2px;height:100%}
+.center{
+  width:90px;height:90px;border:2px solid white;
+  border-radius:50%;position:absolute;
+  left:50%;top:50%;transform:translate(-50%,-50%)
+}
+
+/* PLAYERS */
+.player{
+  width:28px;height:28px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;
+  position:absolute;cursor:grab;
+  box-shadow:0 2px 6px #000;
+}
+.red{background:var(--red)}
+.blue{background:var(--blue)}
+
+canvas{
+  position:absolute;
+  top:0;left:0;
+}
+</style>
+</head>
+
+<body>
+<header>⚽ Football Analysis Pro</header>
+
+<div id="app">
+
+<!-- PANEL -->
+<div id="panel">
+
+<div class="section">
+<h3>Video</h3>
+<input type="file" id="videoInput" accept="video/*">
+</div>
+
+<div class="section">
+<h3>Teams</h3>
+<input id="teamRed" value="RED TEAM">
+<input id="teamBlue" value="BLUE TEAM">
+</div>
+
+<div class="section">
+<h3>Events</h3>
+<select id="eventType">
+<option>Pass</option><option>Shot</option><option>Goal</option>
+<option>Foul</option><option>Custom</option>
+</select>
+<button class="primary" onclick="tagEvent()">Tag Event</button>
+<div id="events"></div>
+</div>
+
+<div class="section">
+<h3>Tactics</h3>
+<button class="red" onclick="addPlayer('red')">Add Red Player</button>
+<button class="blue" onclick="addPlayer('blue')">Add Blue Player</button>
+<button onclick="setMode('arrow')">Draw Arrow</button>
+<button onclick="setMode('circle')">Draw Circle</button>
+<button onclick="setMode('free')">Free Draw</button>
+<button onclick="clearDraw()">Clear Drawing</button>
+</div>
+
+<div class="section">
+<h3>Data</h3>
+<button onclick="saveSession()">Save Session</button>
+<button onclick="loadSession()">Load Session</button>
+<button onclick="exportJSON()">Export JSON</button>
+</div>
+
+</div>
+
+<!-- MAIN -->
+<div id="main">
+<video id="video" controls></video>
+
+<div id="pitch">
+<div class="line mid"></div>
+<div class="center"></div>
+<canvas id="draw"></canvas>
+</div>
+</div>
+
+</div>
+
+<script>
+const video=document.getElementById("video");
+const pitch=document.getElementById("pitch");
+const canvas=document.getElementById("draw");
+const ctx=canvas.getContext("2d");
+canvas.width=760; canvas.height=470;
+
+let mode=null,start=null,drawing=false;
+let events=[],players=[];
+
+/* VIDEO */
+videoInput.onchange=e=>{
+  video.src=URL.createObjectURL(e.target.files[0]);
+};
+
+/* EVENTS */
+function tagEvent(){
+  events.push({time:video.currentTime,type:eventType.value});
+  renderEvents();
+}
+
+function renderEvents(){
+  events.innerHTML="";
+  eventsDiv=document.getElementById("events");
+  eventsDiv.innerHTML="";
+  events.forEach((e,i)=>{
+    const d=document.createElement("div");
+    d.className="event";
+    d.textContent=`${i+1}. ${e.time.toFixed(2)}s — ${e.type}`;
+    d.onclick=()=>video.currentTime=e.time;
+    eventsDiv.appendChild(d);
+  });
+}
+
+/* PLAYERS */
+function addPlayer(team){
+  const p=document.createElement("div");
+  p.className=`player ${team}`;
+  p.textContent=players.length+1;
+  p.style.left="50px";
+  p.style.top="50px";
+  pitch.appendChild(p);
+  players.push(p);
+
+  p.onmousedown=e=>{
+    const ox=e.offsetX,oy=e.offsetY;
+    document.onmousemove=ev=>{
+      p.style.left=ev.pageX-pitch.offsetLeft-ox+"px";
+      p.style.top=ev.pageY-pitch.offsetTop-oy+"px";
+    };
+    document.onmouseup=()=>document.onmousemove=null;
+  };
+}
+
+/* DRAWING */
+function setMode(m){mode=m}
+canvas.onmousedown=e=>{
+  drawing=true; start={x:e.offsetX,y:e.offsetY};
+  if(mode==="free"){ctx.beginPath();ctx.moveTo(start.x,start.y);}
+};
+canvas.onmousemove=e=>{
+  if(!drawing||mode!=="free")return;
+  ctx.lineTo(e.offsetX,e.offsetY);
+  ctx.strokeStyle="white";ctx.stroke();
+};
+canvas.onmouseup=e=>{
+  if(!drawing)return;
+  drawing=false;
+  ctx.strokeStyle="white";ctx.lineWidth=2;
+  ctx.beginPath();
+  if(mode==="arrow"){ctx.moveTo(start.x,start.y);ctx.lineTo(e.offsetX,e.offsetY);}
+  if(mode==="circle"){
+    let r=Math.hypot(e.offsetX-start.x,e.offsetY-start.y);
+    ctx.arc(start.x,start.y,r,0,Math.PI*2);
+  }
+  ctx.stroke();
+};
+
+function clearDraw(){ctx.clearRect(0,0,canvas.width,canvas.height);}
+
+/* SAVE / LOAD */
+function saveSession(){
+  download({events,teamRed:teamRed.value,teamBlue:teamBlue.value},"session.json");
+}
+function loadSession(){
+  const i=document.createElement("input");i.type="file";
+  i.onchange=e=>{
+    const r=new FileReader();
+    r.onload=()=>{
+      const d=JSON.parse(r.result);
+      events=d.events||[];
+      teamRed.value=d.teamRed||"";
+      teamBlue.value=d.teamBlue||"";
+      renderEvents();
+    };
+    r.readAsText(e.target.files[0]);
+  };
+  i.click();
+}
+function exportJSON(){download(events,"analysis.json");}
+function download(data,name){
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)]));
+  a.download=name;a.click();
+}
+</script>
+
+</body>
+</html>
